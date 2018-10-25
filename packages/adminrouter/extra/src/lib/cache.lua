@@ -137,7 +137,14 @@ local function request(url, accept_404_reply, auth_token)
 end
 
 local function is_ip_per_task(app)
-    return app["ipAddress"] ~= nil and app["ipAddress"] ~= cjson_safe.null
+    local networks = app["networks"]
+    local is_ip_per_task = false
+    for i, n in ipairs(networks) do
+       if n["mode"] == "container" then
+           is_ip_per_task = true
+       end
+    end
+    return is_ip_per_task
 end
 
 local function is_user_network(app)
@@ -239,21 +246,12 @@ local function fetch_and_store_marathon_apps(auth_token)
 
        local ports = task["ports"] --task host port mapping by default
        if is_ip_per_task(app) then
-         ports = {}
-         if is_user_network(app) then
-            -- override with ports from the container's portMappings
-            local port_mappings = app["container"]["docker"]["portMappings"] or app["portDefinitions"] or {}
-            local port_attr = app["container"]["docker"]["portMappings"] and "containerPort" or "port"
-            for _, port_mapping in ipairs(port_mappings) do
-               table.insert(ports, port_mapping[port_attr])
-            end
-         else
-            --override with the discovery ports
-            local discovery_ports = app["ipAddress"]["discovery"]["ports"]
-            for _, discovery_port in ipairs(discovery_ports) do
-                table.insert(ports, discovery_port["number"])
-            end
-         end
+          ports = {}
+          --override with the container ports
+          local port_mappings = app["container"]["portMappings"]
+          for _, port_mapping in ipairs(port_mappings) do
+             table.insert(ports, port_mapping["containerPort"])
+          end
        end
 
        if not ports then
